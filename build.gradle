@@ -1,7 +1,7 @@
 plugins {
     id 'java-gradle-plugin'
+    id 'com.gradle.plugin-publish' version '2.0.0'
     id 'maven-publish'
-    id 'com.gradle.plugin-publish' version '1.3.1'
     id 'pl.allegro.tech.build.axion-release' version '1.21.0'
 }
 
@@ -64,14 +64,14 @@ gradlePlugin {
     testSourceSets sourceSets.functionalTest
 
     plugins {
-        githubPackages {
+        register('githubPackages') {
             id                  = 'io.github.duckasteroid.github-packages'
             displayName         = 'GitHub Packages Plugin'
             description         = 'Configures an authenticated GitHub Packages Maven repository on a Gradle project.'
             tags                = ['github', 'github-packages', 'maven', 'repository']
             implementationClass = 'io.github.duckasteroid.gradle.githubpackages.GithubPackagesPlugin'
         }
-        githubPackagesSettings {
+        register('githubPackagesSettings') {
             id                  = 'io.github.duckasteroid.github-packages-settings'
             displayName         = 'GitHub Packages Settings Plugin'
             description         = 'Configures an authenticated GitHub Packages Maven repository in dependencyResolutionManagement.'
