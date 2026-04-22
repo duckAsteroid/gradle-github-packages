@@ -1,0 +1,355 @@
+package io.github.duckasteroid.gradle.githubpackages;
+
+import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.GradleRunner;
+import org.gradle.testkit.runner.TaskOutcome;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Functional tests for {@link GithubPackagesPlugin} using Gradle TestKit.
+ */
+class GithubPackagesPluginFunctionalTest {
+
+    @TempDir
+    File projectDir;
+
+    private File buildFile() {
+        return new File(projectDir, "build.gradle");
+    }
+
+    private File settingsFile() {
+        return new File(projectDir, "settings.gradle");
+    }
+
+    private File gradlePropertiesFile() {
+        return new File(projectDir, "gradle.properties");
+    }
+
+    @Test
+    void pluginAppliesAndAddsRepository() throws IOException {
+        // language=groovy
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        // language=groovy
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                    username   = 'user'
+                    token      = 'ghp_dummy'
+                }
+
+                tasks.register('printRepos') {
+                    doLast {
+                        repositories.each { println 'REPO: ' + it.name }
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepos", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO: GitHubPackages-test-repo"),
+                "Expected repository 'GitHubPackages-test-repo' to be registered.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepos").getOutcome());
+    }
+
+    @Test
+    void pluginConfiguresPublishingRepositoryWhenMavenPublishIsPresent() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                    id 'maven-publish'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                    username   = 'user'
+                    token      = 'ghp_dummy'
+                }
+
+                tasks.register('printPublishRepos') {
+                    doLast {
+                        publishing.repositories.each { println 'PUB_REPO: ' + it.name }
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printPublishRepos", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("PUB_REPO: GitHubPackages-test-repo"),
+                "Expected publishing repository 'GitHubPackages-test-repo' to be registered.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printPublishRepos").getOutcome());
+    }
+
+    @Test
+    void usesEnvironmentVariablesWhenPropertiesAreNotSet() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GITHUB_ACTOR", "env-user",
+                        "GITHUB_TOKEN", "env-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: env-user"),
+                "Expected username from GITHUB_ACTOR when gpr.user is not set.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: env-token"),
+                "Expected token from GITHUB_TOKEN when gpr.key is not set.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void gradlePropertiesTakePrecedenceOverEnvironmentVariables() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+        Files.writeString(gradlePropertiesFile().toPath(), """
+                gpr.user=prop-user
+                gpr.key=prop-token
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GITHUB_ACTOR", "env-user",
+                        "GITHUB_TOKEN", "env-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: prop-user"),
+                "Expected gpr.user to take precedence over GITHUB_ACTOR.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: prop-token"),
+                "Expected gpr.key to take precedence over GITHUB_TOKEN.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void settingsPluginConfiguresPluginManagementRepository() throws IOException {
+        Files.writeString(settingsFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages-settings'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                    username   = 'user'
+                    token      = 'ghp_dummy'
+                }
+
+                gradle.settingsEvaluated { evaluatedSettings ->
+                    evaluatedSettings.pluginManagement.repositories.each { repo ->
+                        println 'PM_REPO: ' + repo.name
+                    }
+                }
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                tasks.register('verifySettingsPlugin') {
+                    doLast {
+                        println 'SETTINGS_PLUGIN_OK'
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("verifySettingsPlugin", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("PM_REPO: GitHubPackages-test-repo"),
+                "Expected pluginManagement repository 'GitHubPackages-test-repo' to be registered.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":verifySettingsPlugin").getOutcome());
+    }
+
+    @Test
+    void repositoriesBlockCanDeclareGitHubPackagesRepository() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                repositories {
+                    gitHubPackages {
+                        owner = 'duckAsteroid'
+                        repo = 'testing'
+                        username = 'user'
+                        token = 'ghp_dummy'
+                    }
+                }
+
+                tasks.register('printRepos') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-testing')
+                        println 'REPO_NAME: ' + repo.name
+                        println 'REPO_URL: ' + repo.url
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepos", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_NAME: GitHubPackages-testing"),
+                "Expected repositories.gitHubPackages to register repository name.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_URL: https://maven.pkg.github.com/duckAsteroid/testing"),
+                "Expected repositories.gitHubPackages to register the GitHub Packages URL.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepos").getOutcome());
+    }
+
+    @Test
+    void pluginManagementDslCannotUseSettingsPluginDefinedMethodsInSameSettingsFile() throws IOException {
+        Files.writeString(settingsFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages-settings'
+                }
+
+                pluginManagement {
+                    repositories {
+                        gitHubPackages {
+                            owner = 'duckAsteroid'
+                            repo = 'testing'
+                        }
+                    }
+                }
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                tasks.register('verifyPluginManagementDsl') {
+                    doLast {
+                        println 'PLUGIN_MANAGEMENT_DSL_OK'
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("verifyPluginManagementDsl", "--stacktrace")
+                .withPluginClasspath()
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("The pluginManagement {} block must appear before any other statements in the script."),
+                "Expected Gradle to reject pluginManagement after plugins block; this is a Gradle ordering rule.\n" + result.getOutput());
+    }
+
+    @Test
+    void settingsPluginHappyPathWithOwnerAndRepositoryOnly() throws IOException {
+        Files.writeString(settingsFile().toPath(), """
+                plugins {
+                  id 'io.github.duckasteroid.github-packages-settings'
+                }
+
+                githubPackages {
+                  owner = "duckAsteroid"
+                  repository = "testing"
+                }
+
+                gradle.settingsEvaluated { evaluatedSettings ->
+                    evaluatedSettings.pluginManagement.repositories.each { repo ->
+                        println 'PM_REPO: ' + repo.name
+                        println 'PM_REPO_URL: ' + repo.url
+                    }
+                    evaluatedSettings.dependencyResolutionManagement.repositories.each { repo ->
+                        println 'DRM_REPO: ' + repo.name
+                        println 'DRM_REPO_URL: ' + repo.url
+                    }
+                }
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                tasks.register('verifySettingsHappyPath') {
+                    doLast {
+                        println 'SETTINGS_HAPPY_PATH_OK'
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("verifySettingsHappyPath", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("PM_REPO: GitHubPackages-testing"),
+                "Expected settings plugin to register pluginManagement repository name.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("PM_REPO_URL: https://maven.pkg.github.com/duckAsteroid/testing"),
+                "Expected settings plugin to register pluginManagement repository URL.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("DRM_REPO: GitHubPackages-testing"),
+                "Expected settings plugin to register dependencyResolutionManagement repository name.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("DRM_REPO_URL: https://maven.pkg.github.com/duckAsteroid/testing"),
+                "Expected settings plugin to register dependencyResolutionManagement repository URL.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":verifySettingsHappyPath").getOutcome());
+    }
+}

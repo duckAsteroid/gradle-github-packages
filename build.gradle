@@ -1,0 +1,96 @@
+plugins {
+    id 'java-gradle-plugin'
+    id 'maven-publish'
+    id 'com.gradle.plugin-publish' version '1.3.1'
+}
+
+group = 'io.github.duckasteroid'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation gradleTestKit()
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// ── Functional test source set ──────────────────────────────────────────────
+sourceSets {
+    functionalTest {
+        java.srcDir 'src/functionalTest/java'
+        resources.srcDir 'src/functionalTest/resources'
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    functionalTestImplementation.extendsFrom testImplementation
+    functionalTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+def functionalTest = tasks.register('functionalTest', Test) {
+    description = 'Runs functional tests.'
+    group = 'verification'
+    testClassesDirs = sourceSets.functionalTest.output.classesDirs
+    classpath = sourceSets.functionalTest.runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter test
+}
+
+tasks.named('check') {
+    dependsOn functionalTest
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// ── Plugin declarations ──────────────────────────────────────────────────────
+gradlePlugin {
+    website = 'https://github.com/duckasteroid/gradle-github-packages'
+    vcsUrl  = 'https://github.com/duckasteroid/gradle-github-packages'
+
+    testSourceSets sourceSets.functionalTest
+
+    plugins {
+        githubPackages {
+            id                  = 'io.github.duckasteroid.github-packages'
+            displayName         = 'GitHub Packages Plugin'
+            description         = 'Configures an authenticated GitHub Packages Maven repository on a Gradle project.'
+            tags                = ['github', 'github-packages', 'maven', 'repository']
+            implementationClass = 'io.github.duckasteroid.gradle.githubpackages.GithubPackagesPlugin'
+        }
+        githubPackagesSettings {
+            id                  = 'io.github.duckasteroid.github-packages-settings'
+            displayName         = 'GitHub Packages Settings Plugin'
+            description         = 'Configures an authenticated GitHub Packages Maven repository in dependencyResolutionManagement.'
+            tags                = ['github', 'github-packages', 'maven', 'repository', 'settings']
+            implementationClass = 'io.github.duckasteroid.gradle.githubpackages.GithubPackagesSettingsPlugin'
+        }
+    }
+}
+
+// ── Publishing ───────────────────────────────────────────────────────────────
+publishing {
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url  = 'https://maven.pkg.github.com/duckasteroid/gradle-github-packages'
+            credentials {
+                username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user') ?: ''
+                password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key') ?: ''
+            }
+        }
+    }
+}
+
