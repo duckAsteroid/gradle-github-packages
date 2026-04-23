@@ -352,4 +352,183 @@ class GithubPackagesPluginFunctionalTest {
                 "Expected settings plugin to register dependencyResolutionManagement repository URL.\n" + result.getOutput());
         assertEquals(TaskOutcome.SUCCESS, result.task(":verifySettingsHappyPath").getOutcome());
     }
+
+    @Test
+    void usesReadPackageEnvironmentVariablesWhenPrimaryCredentialsAreNotSet() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GH_PACKAGES_READ_USER", "read-user",
+                        "GH_PACKAGES_READ_TOKEN", "read-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: read-user"),
+                "Expected username from GH_PACKAGES_READ_USER when higher precedence sources are absent.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: read-token"),
+                "Expected token from GH_PACKAGES_READ_TOKEN when higher precedence sources are absent.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void githubActorAndTokenTakePrecedenceOverReadPackageEnvironmentVariables() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GITHUB_ACTOR", "env-user",
+                        "GITHUB_TOKEN", "env-token",
+                        "GH_PACKAGES_READ_USER", "read-user",
+                        "GH_PACKAGES_READ_TOKEN", "read-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: env-user"),
+                "Expected GITHUB_ACTOR to take precedence over GH_PACKAGES_READ_USER.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: env-token"),
+                "Expected GITHUB_TOKEN to take precedence over GH_PACKAGES_READ_TOKEN.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void gradlePropertiesTakePrecedenceOverReadPackageEnvironmentVariables() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+        Files.writeString(gradlePropertiesFile().toPath(), """
+                gpr.user=prop-user
+                gpr.key=prop-token
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GH_PACKAGES_READ_USER", "read-user",
+                        "GH_PACKAGES_READ_TOKEN", "read-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: prop-user"),
+                "Expected gpr.user to take precedence over GH_PACKAGES_READ_USER.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: prop-token"),
+                "Expected gpr.key to take precedence over GH_PACKAGES_READ_TOKEN.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void settingsPluginUsesReadPackageEnvironmentVariablesWhenPrimaryCredentialsAreNotSet() throws IOException {
+        Files.writeString(settingsFile().toPath(), """
+                plugins {
+                  id 'io.github.duckasteroid.github-packages-settings'
+                }
+
+                githubPackages {
+                  owner = "duckAsteroid"
+                  repository = "testing"
+                }
+
+                gradle.settingsEvaluated { evaluatedSettings ->
+                    evaluatedSettings.pluginManagement.repositories.each { repo ->
+                        println 'PM_REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'PM_REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                    evaluatedSettings.dependencyResolutionManagement.repositories.each { repo ->
+                        println 'DRM_REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'DRM_REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                tasks.register('verifySettingsReadFallback') {
+                    doLast {
+                        println 'SETTINGS_READ_FALLBACK_OK'
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("verifySettingsReadFallback", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GH_PACKAGES_READ_USER", "read-user",
+                        "GH_PACKAGES_READ_TOKEN", "read-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("PM_REPO_USER: read-user"),
+                "Expected pluginManagement username from GH_PACKAGES_READ_USER.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("PM_REPO_TOKEN: read-token"),
+                "Expected pluginManagement token from GH_PACKAGES_READ_TOKEN.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("DRM_REPO_USER: read-user"),
+                "Expected dependencyResolutionManagement username from GH_PACKAGES_READ_USER.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("DRM_REPO_TOKEN: read-token"),
+                "Expected dependencyResolutionManagement token from GH_PACKAGES_READ_TOKEN.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":verifySettingsReadFallback").getOutcome());
+    }
 }

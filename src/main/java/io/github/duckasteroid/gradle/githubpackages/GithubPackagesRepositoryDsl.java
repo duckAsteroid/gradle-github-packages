@@ -6,16 +6,27 @@ import org.gradle.api.artifacts.dsl.RepositoryHandler;
 import org.gradle.api.provider.ProviderFactory;
 
 /**
- * DSL entrypoint for use inside a repositories block:
+ * DSL entrypoint for use inside a repositories block within build scripts.
  *
  * <pre>{@code
  * repositories {
  *     gitHubPackages {
  *         owner = "duckAsteroid"
  *         repo = "testing"
+ *         // Optional: override credentials
+ *         // username = "my-user"
+ *         // token = "ghp_xxx"
  *     }
  * }
  * }</pre>
+ *
+ * <p><strong>Credential Resolution:</strong>
+ * If username/token are not explicitly provided, they are resolved using a three-tier fallback:
+ * <ol>
+ *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key}</li>
+ *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
+ *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
+ * </ol>
  */
 public class GithubPackagesRepositoryDsl {
 
@@ -46,12 +57,8 @@ public class GithubPackagesRepositoryDsl {
     }
 
     private void configureDefaults(GithubPackagesRepositorySpec spec) {
-        spec.setUsername(providers.gradleProperty("gpr.user")
-                .orElse(providers.environmentVariable("GITHUB_ACTOR"))
-                .getOrElse(""));
-        spec.setToken(providers.gradleProperty("gpr.key")
-                .orElse(providers.environmentVariable("GITHUB_TOKEN"))
-                .getOrElse(""));
+        spec.setUsername(CredentialProviders.USER.apply(providers).getOrElse(""));
+        spec.setToken(CredentialProviders.TOKEN.apply(providers).getOrElse(""));
     }
 
     private void addRepository(GithubPackagesRepositorySpec spec) {
@@ -82,6 +89,7 @@ public class GithubPackagesRepositoryDsl {
         private String username;
         private String token;
 
+        /** GitHub organisation or user that owns the package repository. Required. */
         public String getOwner() {
             return owner;
         }
@@ -90,6 +98,7 @@ public class GithubPackagesRepositoryDsl {
             this.owner = owner;
         }
 
+        /** Name of the GitHub repository that hosts the packages. Required. */
         public String getRepo() {
             return repo;
         }
@@ -98,6 +107,10 @@ public class GithubPackagesRepositoryDsl {
             this.repo = repo;
         }
 
+        /**
+         * GitHub username used for authentication.
+         * Defaults to gpr.user / GITHUB_ACTOR / GH_PACKAGES_READ_USER via credential resolution chain.
+         */
         public String getUsername() {
             return username;
         }
@@ -106,6 +119,10 @@ public class GithubPackagesRepositoryDsl {
             this.username = username;
         }
 
+        /**
+         * GitHub token used for authentication.
+         * Defaults to gpr.key / GITHUB_TOKEN / GH_PACKAGES_READ_TOKEN via credential resolution chain.
+         */
         public String getToken() {
             return token;
         }

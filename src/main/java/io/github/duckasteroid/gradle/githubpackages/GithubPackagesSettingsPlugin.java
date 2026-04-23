@@ -22,6 +22,14 @@ import org.gradle.plugin.management.PluginManagementSpec;
  *     repository = 'my-repo'
  * }
  * }</pre>
+ *
+ * <p><strong>Credential Resolution:</strong>
+ * Credentials are resolved using a three-tier fallback chain (first available wins):
+ * <ol>
+ *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key} (gradle.properties)</li>
+ *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
+ *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
+ * </ol>
  */
 public class GithubPackagesSettingsPlugin implements Plugin<Settings> {
 
