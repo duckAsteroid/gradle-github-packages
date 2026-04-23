@@ -394,7 +394,7 @@ class GithubPackagesPluginFunctionalTest {
     }
 
     @Test
-    void githubActorAndTokenTakePrecedenceOverReadPackageEnvironmentVariables() throws IOException {
+    void readPackageEnvironmentVariablesTakePrecedenceOverGithubActorAndToken() throws IOException {
         Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
 
         Files.writeString(buildFile().toPath(), """
@@ -428,10 +428,10 @@ class GithubPackagesPluginFunctionalTest {
                 .withPluginClasspath()
                 .build();
 
-        assertTrue(result.getOutput().contains("REPO_USER: env-user"),
-                "Expected GITHUB_ACTOR to take precedence over GH_PACKAGES_READ_USER.\n" + result.getOutput());
-        assertTrue(result.getOutput().contains("REPO_TOKEN: env-token"),
-                "Expected GITHUB_TOKEN to take precedence over GH_PACKAGES_READ_TOKEN.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_USER: read-user"),
+                "Expected GH_PACKAGES_READ_USER to take precedence over GITHUB_ACTOR.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: read-token"),
+                "Expected GH_PACKAGES_READ_TOKEN to take precedence over GITHUB_TOKEN.\n" + result.getOutput());
         assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
     }
 

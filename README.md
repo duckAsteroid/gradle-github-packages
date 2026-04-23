@@ -63,15 +63,7 @@ gpr.user=your-github-username
 gpr.key=your-github-token
 ```
 
-### Tier 2: Standard GitHub Actions Environment Variables
-```bash
-export GITHUB_ACTOR=your-github-username
-export GITHUB_TOKEN=your-github-token
-```
-
-These are automatically set in GitHub Actions CI/CD workflows.
-
-### Tier 3: Read-Only Package Environment Variables (Lowest Priority)
+### Tier 2: Read-Only Package Environment Variables
 ```bash
 export GH_PACKAGES_READ_USER=your-github-username
 export GH_PACKAGES_READ_TOKEN=your-github-token
@@ -79,14 +71,24 @@ export GH_PACKAGES_READ_TOKEN=your-github-token
 
 These are useful when you want to use read-only credentials from a separate organization without storing full PAT secrets as repository secrets.
 
+### Tier 3: Standard GitHub Actions Environment Variables (Lowest Priority)
+```bash
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-github-token
+```
+
+These are automatically set in GitHub Actions CI/CD workflows.
+
 ## Precedence Example
 
 If you have:
 - `gpr.user=alice` in gradle.properties
-- `GITHUB_ACTOR=bob` in environment
 - `GH_PACKAGES_READ_USER=charlie` in environment
+- `GITHUB_ACTOR=bob` in environment
 
 The plugin will use `alice` (from Tier 1), ignoring the environment variables.
+
+Without `gpr.user`, it will use `charlie` (Tier 2) before `bob` (Tier 3).
 
 ## Common Scenarios
 
@@ -98,7 +100,8 @@ gpr.key=ghp_your_personal_access_token
 ```
 
 ### GitHub Actions CI/CD
-No configuration needed! The workflow automatically provides `GITHUB_ACTOR` and `GITHUB_TOKEN`.
+No extra configuration is required when only `GITHUB_ACTOR` and `GITHUB_TOKEN` are available.
+If `GH_PACKAGES_READ_*` is also set, the plugin prefers `GH_PACKAGES_READ_*`.
 
 ### Organization-Wide Read Access
 Use bot accounts or organization tokens with GitHub's `GH_PACKAGES_READ_*` variables to provide read access across multiple repositories without storing secrets:
