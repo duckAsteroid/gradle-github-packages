@@ -230,6 +230,49 @@ class GithubPackagesPluginFunctionalTest {
     }
 
     @Test
+    void settingsPluginPreservesDefaultGradlePluginPortal() throws IOException {
+        Files.writeString(settingsFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages-settings'
+                }
+
+                githubPackages {
+                    owner      = 'test-owner'
+                    repository = 'test-repo'
+                    username   = 'user'
+                    token      = 'ghp_dummy'
+                }
+
+                gradle.settingsEvaluated { evaluatedSettings ->
+                    evaluatedSettings.pluginManagement.repositories.each { repo ->
+                        println 'PM_REPO: ' + repo.name
+                    }
+                }
+                """);
+
+        Files.writeString(buildFile().toPath(), """
+                tasks.register('verifyPluginPortalPreserved') {
+                    doLast {
+                        println 'PLUGIN_PORTAL_PRESERVED_OK'
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("verifyPluginPortalPreserved", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("PM_REPO: Gradle Central Plugin Repository"),
+                "Expected the default Gradle Plugin Portal to remain in pluginManagement.repositories "
+                        + "after the settings plugin adds its own repository.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("PM_REPO: GitHubPackages-test-repo"),
+                "Expected pluginManagement repository 'GitHubPackages-test-repo' to still be registered.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":verifyPluginPortalPreserved").getOutcome());
+    }
+
+    @Test
     void repositoriesBlockCanDeclareGitHubPackagesRepository() throws IOException {
         Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
 

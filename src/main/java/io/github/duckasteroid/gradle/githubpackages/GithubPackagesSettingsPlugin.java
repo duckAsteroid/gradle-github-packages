@@ -27,9 +27,13 @@ import org.gradle.plugin.management.PluginManagementSpec;
  * Credentials are resolved using a three-tier fallback chain (first available wins):
  * <ol>
  *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key} (gradle.properties)</li>
- *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
  *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
+ *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
  * </ol>
+ *
+ * <p>Adding a repository to {@code pluginManagement.repositories} suppresses Gradle's implicit
+ * default Plugin Portal, so this plugin re-adds {@code gradlePluginPortal()} explicitly to keep
+ * plugin resolution additive rather than silently replaced.
  */
 public class GithubPackagesSettingsPlugin implements Plugin<Settings> {
 
@@ -60,6 +64,9 @@ public class GithubPackagesSettingsPlugin implements Plugin<Settings> {
             String repoName = "GitHubPackages-" + extension.getRepository().get();
 
             PluginManagementSpec pluginManagement = evaluatedSettings.getPluginManagement();
+            // Adding any repository here suppresses Gradle's implicit default (the Plugin Portal),
+            // so re-add it explicitly to keep plugin resolution additive rather than replaced.
+            pluginManagement.getRepositories().gradlePluginPortal();
             pluginManagement.getRepositories().maven(repo -> {
                 repo.setName(repoName);
                 repo.setUrl(url);
