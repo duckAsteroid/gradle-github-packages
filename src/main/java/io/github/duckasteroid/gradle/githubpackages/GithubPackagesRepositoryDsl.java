@@ -3,6 +3,7 @@ package io.github.duckasteroid.gradle.githubpackages;
 import groovy.lang.Closure;
 import org.gradle.api.Action;
 import org.gradle.api.artifacts.dsl.RepositoryHandler;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
 
 /**
@@ -13,7 +14,9 @@ import org.gradle.api.provider.ProviderFactory;
  *     gitHubPackages {
  *         owner = "duckAsteroid"
  *         repo = "testing"
- *         // Optional: override credentials
+ *         // Optional: pick a named credential profile instead of the unqualified gpr.user/gpr.key
+ *         // profile = "personal"
+ *         // Optional: override credentials outright
  *         // username = "my-user"
  *         // token = "ghp_xxx"
  *     }
@@ -23,7 +26,8 @@ import org.gradle.api.provider.ProviderFactory;
  * <p><strong>Credential Resolution:</strong>
  * If username/token are not explicitly provided, they are resolved using a three-tier fallback:
  * <ol>
- *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key}</li>
+ *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key}, or {@code gpr.<profile>.user} /
+ *       {@code gpr.<profile>.key} when {@code profile} is set</li>
  *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
  *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
  * </ol>
@@ -48,20 +52,21 @@ public class GithubPackagesRepositoryDsl {
 
     public void call(Closure<?> closure) {
         GithubPackagesRepositorySpec spec = new GithubPackagesRepositorySpec();
-        configureDefaults(spec);
         RepositoryHandler target = resolveTargetRepositories(closure);
         // Configure from Groovy DSL: repositories { gitHubPackages { ... } }
         Closure<?> cloned = (Closure<?>) closure.clone();
         cloned.setDelegate(spec);
         cloned.setResolveStrategy(Closure.DELEGATE_FIRST);
         cloned.call();
+        // Applied after the closure runs so `profile` (and any explicit username/token) are known.
+        applyCredentialDefaults(spec);
         addRepository(target, spec);
     }
 
     public void call(Action<? super GithubPackagesRepositorySpec> action) {
         GithubPackagesRepositorySpec spec = new GithubPackagesRepositorySpec();
-        configureDefaults(spec);
         action.execute(spec);
+        applyCredentialDefaults(spec);
         addRepository(fallbackRepositories, spec);
     }
 
@@ -82,9 +87,15 @@ public class GithubPackagesRepositoryDsl {
         return fallbackRepositories;
     }
 
-    private void configureDefaults(GithubPackagesRepositorySpec spec) {
-        spec.setUsername(CredentialProviders.USER.apply(providers).getOrElse(""));
-        spec.setToken(CredentialProviders.TOKEN.apply(providers).getOrElse(""));
+    /** Fills in username/token only if the user didn't already set them explicitly in the DSL. */
+    private void applyCredentialDefaults(GithubPackagesRepositorySpec spec) {
+        Provider<String> profile = providers.provider(spec::getProfile);
+        if (spec.getUsername() == null) {
+            spec.setUsername(CredentialProviders.USER.apply(providers, profile).getOrElse(""));
+        }
+        if (spec.getToken() == null) {
+            spec.setToken(CredentialProviders.TOKEN.apply(providers, profile).getOrElse(""));
+        }
     }
 
     private void addRepository(RepositoryHandler repositories, GithubPackagesRepositorySpec spec) {
@@ -112,6 +123,7 @@ public class GithubPackagesRepositoryDsl {
     public static class GithubPackagesRepositorySpec {
         private String owner;
         private String repo;
+        private String profile;
         private String username;
         private String token;
 
@@ -134,8 +146,22 @@ public class GithubPackagesRepositoryDsl {
         }
 
         /**
+         * Optional named credential profile. When set, and username/token aren't explicitly
+         * provided, credentials are resolved from {@code gpr.<profile>.user} /
+         * {@code gpr.<profile>.key} instead of the unqualified {@code gpr.user} / {@code gpr.key}.
+         */
+        public String getProfile() {
+            return profile;
+        }
+
+        public void setProfile(String profile) {
+            this.profile = profile;
+        }
+
+        /**
          * GitHub username used for authentication.
-         * Defaults to gpr.user / GITHUB_ACTOR / GH_PACKAGES_READ_USER via credential resolution chain.
+         * Defaults to gpr.user (or gpr.&lt;profile&gt;.user) / GH_PACKAGES_READ_USER / GITHUB_ACTOR
+         * via the credential resolution chain.
          */
         public String getUsername() {
             return username;
@@ -147,7 +173,8 @@ public class GithubPackagesRepositoryDsl {
 
         /**
          * GitHub token used for authentication.
-         * Defaults to gpr.key / GITHUB_TOKEN / GH_PACKAGES_READ_TOKEN via credential resolution chain.
+         * Defaults to gpr.key (or gpr.&lt;profile&gt;.key) / GH_PACKAGES_READ_TOKEN / GITHUB_TOKEN
+         * via the credential resolution chain.
          */
         public String getToken() {
             return token;

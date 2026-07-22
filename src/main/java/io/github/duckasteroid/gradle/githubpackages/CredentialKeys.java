@@ -28,5 +28,15 @@ public interface CredentialKeys {
 
     /** Custom environment variable for a read-only packages token. */
     String ENV_GH_READ_PACKAGES_TOKEN = "GH_PACKAGES_READ_TOKEN";
+
+    /** Gradle property key for the username of a named credential profile, e.g. {@code gpr.personal.user}. */
+    static String gradlePropsUser(String profile) {
+        return "gpr." + profile + ".user";
+    }
+
+    /** Gradle property key for the token of a named credential profile, e.g. {@code gpr.personal.key}. */
+    static String gradlePropsKey(String profile) {
+        return "gpr." + profile + ".key";
+    }
 }
 
