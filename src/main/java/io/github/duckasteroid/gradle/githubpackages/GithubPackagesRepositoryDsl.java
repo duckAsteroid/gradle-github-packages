@@ -24,36 +24,62 @@ import org.gradle.api.provider.ProviderFactory;
  * If username/token are not explicitly provided, they are resolved using a three-tier fallback:
  * <ol>
  *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key}</li>
- *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
  *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
+ *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
  * </ol>
+ *
+ * <p><strong>Target repository handler:</strong> when invoked as {@code gitHubPackages { ... }}
+ * from within a {@code repositories { }} block, the repository is added to whichever
+ * {@link RepositoryHandler} actually delegates that block (e.g. {@code project.repositories},
+ * {@code publishing.repositories}, or {@code pluginManagement.repositories}), resolved from the
+ * closure's lexical owner at call time. The handler passed to the constructor is only used as a
+ * fallback when that can't be determined (e.g. the {@link Action}-based entry point, which has no
+ * enclosing closure to inspect).
  */
 public class GithubPackagesRepositoryDsl {
 
-    private final RepositoryHandler repositories;
+    private final RepositoryHandler fallbackRepositories;
     private final ProviderFactory providers;
 
-    public GithubPackagesRepositoryDsl(RepositoryHandler repositories, ProviderFactory providers) {
-        this.repositories = repositories;
+    public GithubPackagesRepositoryDsl(RepositoryHandler fallbackRepositories, ProviderFactory providers) {
+        this.fallbackRepositories = fallbackRepositories;
         this.providers = providers;
     }
 
     public void call(Closure<?> closure) {
         GithubPackagesRepositorySpec spec = new GithubPackagesRepositorySpec();
         configureDefaults(spec);
+        RepositoryHandler target = resolveTargetRepositories(closure);
         // Configure from Groovy DSL: repositories { gitHubPackages { ... } }
         Closure<?> cloned = (Closure<?>) closure.clone();
         cloned.setDelegate(spec);
         cloned.setResolveStrategy(Closure.DELEGATE_FIRST);
         cloned.call();
-        addRepository(spec);
+        addRepository(target, spec);
     }
 
     public void call(Action<? super GithubPackagesRepositorySpec> action) {
         GithubPackagesRepositorySpec spec = new GithubPackagesRepositorySpec();
         configureDefaults(spec);
         action.execute(spec);
-        addRepository(spec);
+        addRepository(fallbackRepositories, spec);
+    }
+
+    /**
+     * The {@code repositories { }} block that lexically encloses {@code gitHubPackages { ... }}
+     * is the closure's owner, and that block's delegate is the actual {@link RepositoryHandler}
+     * being configured (project, publishing, or pluginManagement repositories) - which may differ
+     * from the handler this instance was constructed with.
+     */
+    private RepositoryHandler resolveTargetRepositories(Closure<?> closure) {
+        Object owner = closure.getOwner();
+        if (owner instanceof Closure) {
+            Object delegate = ((Closure<?>) owner).getDelegate();
+            if (delegate instanceof RepositoryHandler) {
+                return (RepositoryHandler) delegate;
+            }
+        }
+        return fallbackRepositories;
     }
 
     private void configureDefaults(GithubPackagesRepositorySpec spec) {
@@ -61,7 +87,7 @@ public class GithubPackagesRepositoryDsl {
         spec.setToken(CredentialProviders.TOKEN.apply(providers).getOrElse(""));
     }
 
-    private void addRepository(GithubPackagesRepositorySpec spec) {
+    private void addRepository(RepositoryHandler repositories, GithubPackagesRepositorySpec spec) {
         String owner = required(spec.getOwner(), "owner");
         String repo = required(spec.getRepo(), "repo");
         String url = "https://maven.pkg.github.com/" + owner + "/" + repo;

@@ -313,6 +313,48 @@ class GithubPackagesPluginFunctionalTest {
     }
 
     @Test
+    void gitHubPackagesInsidePublishingRepositoriesTargetsPublishingRepositories() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                    id 'maven-publish'
+                }
+
+                publishing {
+                    repositories {
+                        gitHubPackages {
+                            owner = 'duckAsteroid'
+                            repo = 'publish-target'
+                            username = 'user'
+                            token = 'ghp_dummy'
+                        }
+                    }
+                }
+
+                tasks.register('printRepos') {
+                    doLast {
+                        repositories.each { println 'PROJECT_REPO: ' + it.name }
+                        publishing.repositories.each { println 'PUBLISH_REPO: ' + it.name }
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepos", "--stacktrace")
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("PUBLISH_REPO: GitHubPackages-publish-target"),
+                "Expected gitHubPackages inside publishing.repositories to register there.\n" + result.getOutput());
+        assertTrue(!result.getOutput().contains("PROJECT_REPO: GitHubPackages-publish-target"),
+                "Did not expect gitHubPackages inside publishing.repositories to leak into project.repositories.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepos").getOutcome());
+    }
+
+    @Test
     void pluginManagementDslCannotUseSettingsPluginDefinedMethodsInSameSettingsFile() throws IOException {
         Files.writeString(settingsFile().toPath(), """
                 plugins {
