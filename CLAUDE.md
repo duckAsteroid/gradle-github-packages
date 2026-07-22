@@ -18,7 +18,19 @@ A Gradle plugin (published to the Gradle Plugin Portal as `io.github.duckasteroi
 
 There is no separate lint/format task configured. `check` depends on `functionalTest` (wired in `build.gradle`), so a single `./gradlew check` covers both suites — this is what CI (`.github/workflows/build.yml`) runs.
 
+Prefer the `gradle-mcp` MCP tool over invoking `./gradlew` through a raw shell command when it's available — it gives structured pass/fail output instead of raw logs to grep through.
+
 Versioning is derived from git tags via the `axion-release` plugin (`version = scmVersion.version` in `build.gradle`) — there is no hardcoded version to bump. Publishing (`publish`, `publishPlugins`) only happens in CI on `v*` tags pushed to `main` (`.github/workflows/publish.yml`); don't run publish tasks locally.
+
+### Releasing
+
+Cutting a release means creating and pushing a `vX.Y.Z` tag on `main`, which triggers `publish.yml` (build, test, `publish`, `publishPlugins` to the Gradle Plugin Portal). Do this with axion-release's own `release` task rather than a manual `git tag` — it verifies the working tree is clean before tagging, and pushes the tag for you:
+
+```bash
+./gradlew release -Prelease.version=X.Y.Z
+```
+
+Without `-Prelease.version`, axion-release defaults to bumping the patch segment of the last tag. This project doesn't follow strict SemVer discipline for pre-1.0 releases (some past patch bumps included what would technically be minor features) — confirm the intended version number with the user rather than assuming either convention. The `release` task fails fast if there are uncommitted changes, so `git status` clean first.
 
 ## Architecture
 
@@ -35,10 +47,12 @@ Gradle's `pluginManagement { }` block must be the first statement in `settings.g
 
 Credential resolution (`CredentialProviders`, keys centralized in `CredentialKeys`) is a three-tier `Provider.orElse()` chain, same for username and token, first available value wins:
 
-1. Gradle property `gpr.user` / `gpr.key` (from `gradle.properties`, project or `~/.gradle`)
+1. Gradle property `gpr.user` / `gpr.key` (from `gradle.properties`, project or `~/.gradle`) — or, when an optional `profile` is set on the `githubPackages`/`gitHubPackages` block, `gpr.<profile>.user` / `gpr.<profile>.key` instead. Deliberately does *not* fall back to the unqualified `gpr.user`/`gpr.key` when a profile is set and unmatched, so a typo'd profile name can't silently leak the wrong identity — it falls through to tier 2 instead.
 2. Env var `GH_PACKAGES_READ_USER` / `GH_PACKAGES_READ_TOKEN` (read-only org-wide credentials)
 3. Env var `GITHUB_ACTOR` / `GITHUB_TOKEN` (GitHub Actions default)
 
-This chain is the source of truth for precedence — reflected in `README.md` and in `CredentialProviders`. Some older Javadoc comments elsewhere in the plugin classes state tiers 2 and 3 in the opposite order; if you touch credential resolution, fix those stale comments too rather than trusting them.
+This chain is the source of truth for precedence — reflected in `README.md` and in `CredentialProviders`.
+
+Laziness matters here: `GithubPackagesExtension`'s username/token conventions must be wired with `Provider.orElse()` (lazy), not `.getOrElse()` (eager), because `profile` may be set later in the same `githubPackages { }` block, after the extension is constructed. Similarly, `GithubPackagesRepositoryDsl.call()` runs the user's closure *before* filling in credential defaults, so `owner`/`repo`/`profile`/explicit `username`/`token` are all known first — defaults only fill in whichever of username/token the closure left `null`.
 
 `GithubPackagesExtension` is shared by both plugins (same class, applied to either `Project` or `Settings` extensions) and computes `mavenUrl()` as `https://maven.pkg.github.com/{owner}/{repository}`; explicit `username`/`token` set on the extension or DSL spec override the resolved-credential convention.
