@@ -19,11 +19,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up JDKs
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            17
+            21
 
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
