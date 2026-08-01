@@ -81,7 +81,22 @@ export GITHUB_ACTOR=your-github-username
 export GITHUB_TOKEN=your-github-token
 ```
 
-These are automatically set in GitHub Actions CI/CD workflows.
+`GITHUB_ACTOR` is automatically injected into every GitHub Actions step with no workflow wiring.
+`GITHUB_TOKEN`, however, is *not* in GitHub's own list of default environment variables — it's
+auto-generated per workflow run, but still has to be explicitly forwarded into the job/step
+environment before this plugin's `System.getenv("GITHUB_TOKEN")` lookup will see it:
+
+```yaml
+jobs:
+  build:
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - run: ./gradlew build
+```
+
+Without that `env:` line, Tier 3 silently falls through (empty `GITHUB_TOKEN`) and, absent Tier
+1/2 credentials, resolution against GitHub Packages fails in CI.
 
 ## Precedence Example
 
@@ -143,7 +158,16 @@ gpr.key=ghp_your_personal_access_token
 ```
 
 ### GitHub Actions CI/CD
-No extra configuration is required when only `GITHUB_ACTOR` and `GITHUB_TOKEN` are available.
+`GITHUB_ACTOR` needs no extra configuration, but `GITHUB_TOKEN` must still be explicitly forwarded
+into the job/step environment, same as any other secret:
+```yaml
+jobs:
+  build:
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - run: ./gradlew build
+```
 If `GH_PACKAGES_READ_*` is also set, the plugin prefers `GH_PACKAGES_READ_*`.
 
 ### Organization-Wide Read Access
