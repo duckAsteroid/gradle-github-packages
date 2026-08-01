@@ -20,7 +20,9 @@ There is no separate lint/format task configured. `check` depends on `functional
 
 Prefer the `gradle-mcp` MCP tool over invoking `./gradlew` through a raw shell command when it's available — it gives structured pass/fail output instead of raw logs to grep through.
 
-Versioning is derived from git tags via the `axion-release` plugin (`version = scmVersion.version` in `build.gradle`) — there is no hardcoded version to bump. Publishing (`publish`, `publishPlugins`) only happens in CI on `v*` tags pushed to `main` (`.github/workflows/publish.yml`); don't run publish tasks locally.
+Versioning is derived from git tags via `duckasteroid-java` (from [duckAsteroid/gradle-convention-plugin](https://github.com/duckAsteroid/gradle-convention-plugin), applied in `build.gradle`) — there is no hardcoded version to bump. Between releases, the dev-build version is computed from Conventional Commits since the last tag (`feat:`→minor, `fix:`/`perf:`→patch, `!`/`BREAKING CHANGE:`→major); an explicit `-Prelease.version=X.Y.Z` (below) always overrides that. Publishing (`publish`, `publishPlugins`) only happens in CI on `v*` tags pushed to `main` (`.github/workflows/publish.yml`); don't run publish tasks locally.
+
+Plugin resolution for `duckasteroid-java` itself is bootstrapped in `settings.gradle` via `io.github.duckasteroid.github-packages-settings` (this project's own settings plugin, pinned to a previously published Plugin Portal version) pointed at `owner=duckAsteroid, repository=gradle-convention-plugin` — `duckasteroid-java` is published only to GitHub Packages, never the Plugin Portal, so it can't be resolved without that bootstrap. The Java toolchain default from `duckasteroid-java` is Java 25; this project pins back to 17 via `duckasteroid.java.version=17` in `gradle.properties` to match the existing target. `duckasteroid-java` configures no publish repository itself (not even GitHub Packages) — this project's actual publish targets (Gradle Plugin Portal via `com.gradle.plugin-publish`, plus `maven-publish`) are untouched and independent of it.
 
 ### Releasing
 
