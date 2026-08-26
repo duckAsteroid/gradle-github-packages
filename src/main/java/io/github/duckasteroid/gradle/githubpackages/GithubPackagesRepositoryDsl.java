@@ -16,6 +16,9 @@ import org.gradle.api.provider.ProviderFactory;
  *         repo = "testing"
  *         // Optional: pick a named credential profile instead of the unqualified gpr.user/gpr.key
  *         // profile = "personal"
+ *         // Optional: read the tier 2 shared credential from differently-named env vars
+ *         // userEnvVar = "MY_USER_ENV_VAR"
+ *         // tokenEnvVar = "MY_TOKEN_ENV_VAR"
  *         // Optional: override credentials outright
  *         // username = "my-user"
  *         // token = "ghp_xxx"
@@ -28,7 +31,8 @@ import org.gradle.api.provider.ProviderFactory;
  * <ol>
  *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key}, or {@code gpr.<profile>.user} /
  *       {@code gpr.<profile>.key} when {@code profile} is set</li>
- *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
+ *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}, or
+ *       the variables named by {@code userEnvVar} / {@code tokenEnvVar} when set</li>
  *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
  * </ol>
  *
@@ -90,11 +94,13 @@ public class GithubPackagesRepositoryDsl {
     /** Fills in username/token only if the user didn't already set them explicitly in the DSL. */
     private void applyCredentialDefaults(GithubPackagesRepositorySpec spec) {
         Provider<String> profile = providers.provider(spec::getProfile);
+        Provider<String> userEnvVar = providers.provider(spec::getUserEnvVar);
+        Provider<String> tokenEnvVar = providers.provider(spec::getTokenEnvVar);
         if (spec.getUsername() == null) {
-            spec.setUsername(CredentialProviders.USER.apply(providers, profile).getOrElse(""));
+            spec.setUsername(CredentialProviders.USER.apply(providers, profile, userEnvVar).getOrElse(""));
         }
         if (spec.getToken() == null) {
-            spec.setToken(CredentialProviders.TOKEN.apply(providers, profile).getOrElse(""));
+            spec.setToken(CredentialProviders.TOKEN.apply(providers, profile, tokenEnvVar).getOrElse(""));
         }
     }
 
@@ -124,6 +130,8 @@ public class GithubPackagesRepositoryDsl {
         private String owner;
         private String repo;
         private String profile;
+        private String userEnvVar;
+        private String tokenEnvVar;
         private String username;
         private String token;
 
@@ -156,6 +164,30 @@ public class GithubPackagesRepositoryDsl {
 
         public void setProfile(String profile) {
             this.profile = profile;
+        }
+
+        /**
+         * Optional override for the name of the tier 2 environment variable used to resolve
+         * {@link #getUsername()}, in place of the default {@code GH_PACKAGES_READ_USER}.
+         */
+        public String getUserEnvVar() {
+            return userEnvVar;
+        }
+
+        public void setUserEnvVar(String userEnvVar) {
+            this.userEnvVar = userEnvVar;
+        }
+
+        /**
+         * Optional override for the name of the tier 2 environment variable used to resolve
+         * {@link #getToken()}, in place of the default {@code GH_PACKAGES_READ_TOKEN}.
+         */
+        public String getTokenEnvVar() {
+            return tokenEnvVar;
+        }
+
+        public void setTokenEnvVar(String tokenEnvVar) {
+            this.tokenEnvVar = tokenEnvVar;
         }
 
         /**

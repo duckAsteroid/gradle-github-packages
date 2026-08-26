@@ -4,7 +4,7 @@ Plugins for Gradle to make it easier to configure GitHub Packages as Maven repos
 
 ## Features
 
-- 🔐 **Flexible credential resolution** with three-tier fallback chain
+- 🔐 **Flexible credential resolution** with three-tier fallback chain, named profiles, and configurable env var names
 - 📦 **Build script support** via `repositories { gitHubPackages { ... } }`
 - ⚙️ **Settings plugin** for `pluginManagement.repositories` and `dependencyResolutionManagement.repositories`
 - 📝 **Zero configuration** - automatically uses your GitHub credentials
@@ -23,6 +23,10 @@ repositories {
         repo = "testing"
         // Optional: pick a named credential profile (see "Named Credential Profiles" below)
         // profile = "personal"
+        // Optional: read the shared credential from differently-named env vars (see "Custom
+        // Environment Variable Names" below)
+        // userEnvVar = "MY_USER_ENV_VAR"
+        // tokenEnvVar = "MY_TOKEN_ENV_VAR"
         // Optional: override credentials outright (defaults to credential resolution chain)
         // username = "my-user"
         // token = "ghp_xxx"
@@ -46,6 +50,10 @@ githubPackages {
     repository = "testing"
     // Optional: pick a named credential profile (see "Named Credential Profiles" below)
     // profile = "personal"
+    // Optional: read the shared credential from differently-named env vars (see "Custom
+    // Environment Variable Names" below)
+    // userEnvVar = "MY_USER_ENV_VAR"
+    // tokenEnvVar = "MY_TOKEN_ENV_VAR"
     // Optional: override credentials outright
     // username = "my-user"
     // token = "ghp_xxx"
@@ -67,13 +75,16 @@ gpr.user=your-github-username
 gpr.key=your-github-token
 ```
 
-### Tier 2: Read-Only Package Environment Variables
+### Tier 2: Shared Credential Environment Variables
 ```bash
 export GH_PACKAGES_READ_USER=your-github-username
 export GH_PACKAGES_READ_TOKEN=your-github-token
 ```
 
-These are useful when you want to use read-only credentials from a separate organization without storing full PAT secrets as repository secrets.
+These are useful for a credential shared across multiple repos/builds - e.g. a bot account or org
+token - without storing a full PAT as a per-repository secret. The variable names are just a
+convention; the plugin doesn't inspect or enforce what scopes the token actually has, and the
+names can be overridden (see "Custom Environment Variable Names" below).
 
 ### Tier 3: Standard GitHub Actions Environment Variables (Lowest Priority)
 ```bash
@@ -147,6 +158,37 @@ there's no `gpr.<profile>.*` there, so it resolves from `GITHUB_ACTOR`/`GITHUB_T
 
 When `profile` is unset, behavior is unchanged (the three-tier chain above, starting from the
 unqualified `gpr.user` / `gpr.key`).
+
+## Custom Environment Variable Names
+
+If your CI secrets already use different variable names for the tier 2 shared credential than
+`GH_PACKAGES_READ_USER` / `GH_PACKAGES_READ_TOKEN`, set `userEnvVar` / `tokenEnvVar` instead of
+renaming your secrets:
+
+```groovy
+repositories {
+    gitHubPackages {
+        owner = "duckAsteroid"
+        repo = "testing"
+        userEnvVar = "MY_USER_ENV_VAR"
+        tokenEnvVar = "MY_TOKEN_ENV_VAR"
+    }
+}
+```
+
+```groovy
+githubPackages {
+    owner = "duckAsteroid"
+    repository = "testing"
+    userEnvVar = "MY_USER_ENV_VAR"
+    tokenEnvVar = "MY_TOKEN_ENV_VAR"
+}
+```
+
+Only the tier 2 variable *name* changes - tier 1 (`gpr.user`/`gpr.key`) still wins when present,
+and tier 3 (`GITHUB_ACTOR`/`GITHUB_TOKEN`) is still the fallback if `MY_USER_ENV_VAR` /
+`MY_TOKEN_ENV_VAR` are unset. `userEnvVar`/`tokenEnvVar` can be combined with `profile` - they're
+independent settings.
 
 ## Common Scenarios
 

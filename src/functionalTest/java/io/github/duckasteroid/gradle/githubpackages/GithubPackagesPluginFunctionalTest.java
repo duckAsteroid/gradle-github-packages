@@ -521,6 +521,142 @@ class GithubPackagesPluginFunctionalTest {
     }
 
     @Test
+    void customUserAndTokenEnvVarNamesOverrideDefaultReadPackageEnvironmentVariables() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner       = 'test-owner'
+                    repository  = 'test-repo'
+                    userEnvVar  = 'MY_USER_ENV_VAR'
+                    tokenEnvVar = 'MY_TOKEN_ENV_VAR'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GH_PACKAGES_READ_USER", "default-user",
+                        "GH_PACKAGES_READ_TOKEN", "default-token",
+                        "MY_USER_ENV_VAR", "custom-user",
+                        "MY_TOKEN_ENV_VAR", "custom-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: custom-user"),
+                "Expected username from the custom userEnvVar name, not the default GH_PACKAGES_READ_USER.\n"
+                        + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: custom-token"),
+                "Expected token from the custom tokenEnvVar name, not the default GH_PACKAGES_READ_TOKEN.\n"
+                        + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void customUserAndTokenEnvVarNamesFallThroughToGithubActionsWhenUnset() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                githubPackages {
+                    owner       = 'test-owner'
+                    repository  = 'test-repo'
+                    userEnvVar  = 'MY_USER_ENV_VAR'
+                    tokenEnvVar = 'MY_TOKEN_ENV_VAR'
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GITHUB_ACTOR", "env-user",
+                        "GITHUB_TOKEN", "env-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: env-user"),
+                "Expected fallthrough to GITHUB_ACTOR when the custom userEnvVar is unset.\n" + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: env-token"),
+                "Expected fallthrough to GITHUB_TOKEN when the custom tokenEnvVar is unset.\n" + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
+    void repositoryDslCustomUserAndTokenEnvVarNamesOverrideDefaults() throws IOException {
+        Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
+
+        Files.writeString(buildFile().toPath(), """
+                plugins {
+                    id 'io.github.duckasteroid.github-packages'
+                }
+
+                repositories {
+                    gitHubPackages {
+                        owner       = 'test-owner'
+                        repo        = 'test-repo'
+                        userEnvVar  = 'MY_USER_ENV_VAR'
+                        tokenEnvVar = 'MY_TOKEN_ENV_VAR'
+                    }
+                }
+
+                tasks.register('printRepoCredentials') {
+                    doLast {
+                        def repo = repositories.findByName('GitHubPackages-test-repo')
+                        println 'REPO_USER: ' + (repo.credentials.username ?: '')
+                        println 'REPO_TOKEN: ' + (repo.credentials.password ?: '')
+                    }
+                }
+                """);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withArguments("printRepoCredentials", "--stacktrace")
+                .withEnvironment(Map.of(
+                        "GH_PACKAGES_READ_USER", "default-user",
+                        "GH_PACKAGES_READ_TOKEN", "default-token",
+                        "MY_USER_ENV_VAR", "custom-user",
+                        "MY_TOKEN_ENV_VAR", "custom-token"
+                ))
+                .withPluginClasspath()
+                .build();
+
+        assertTrue(result.getOutput().contains("REPO_USER: custom-user"),
+                "Expected username from the custom userEnvVar name, not the default GH_PACKAGES_READ_USER.\n"
+                        + result.getOutput());
+        assertTrue(result.getOutput().contains("REPO_TOKEN: custom-token"),
+                "Expected token from the custom tokenEnvVar name, not the default GH_PACKAGES_READ_TOKEN.\n"
+                        + result.getOutput());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":printRepoCredentials").getOutcome());
+    }
+
+    @Test
     void gradlePropertiesTakePrecedenceOverReadPackageEnvironmentVariables() throws IOException {
         Files.writeString(settingsFile().toPath(), "rootProject.name = 'test-project'\n");
         Files.writeString(gradlePropertiesFile().toPath(), """

@@ -50,10 +50,10 @@ Gradle's `pluginManagement { }` block must be the first statement in `settings.g
 Credential resolution (`CredentialProviders`, keys centralized in `CredentialKeys`) is a three-tier `Provider.orElse()` chain, same for username and token, first available value wins:
 
 1. Gradle property `gpr.user` / `gpr.key` (from `gradle.properties`, project or `~/.gradle`) — or, when an optional `profile` is set on the `githubPackages`/`gitHubPackages` block, `gpr.<profile>.user` / `gpr.<profile>.key` instead. Deliberately does *not* fall back to the unqualified `gpr.user`/`gpr.key` when a profile is set and unmatched, so a typo'd profile name can't silently leak the wrong identity — it falls through to tier 2 instead.
-2. Env var `GH_PACKAGES_READ_USER` / `GH_PACKAGES_READ_TOKEN` (read-only org-wide credentials)
+2. Env var `GH_PACKAGES_READ_USER` / `GH_PACKAGES_READ_TOKEN` (a shared credential, e.g. a bot/org account — the name is just convention, not an enforced scope) — or, when `userEnvVar`/`tokenEnvVar` is set on the `githubPackages`/`gitHubPackages` block, that differently-named env var instead.
 3. Env var `GITHUB_ACTOR` / `GITHUB_TOKEN` (GitHub Actions default)
 
-This chain is the source of truth for precedence — reflected in `README.md` and in `CredentialProviders`.
+This chain is the source of truth for precedence — reflected in `README.md` and in `CredentialProviders`. `profile` and `userEnvVar`/`tokenEnvVar` are independent settings — the former repoints tier 1, the latter repoints tier 2's variable name — and both are wired lazily via `CredentialProviders.apply(providers, profile, envVarName)` for the same reason as below (values may be set later in the same DSL block).
 
 Laziness matters here: `GithubPackagesExtension`'s username/token conventions must be wired with `Provider.orElse()` (lazy), not `.getOrElse()` (eager), because `profile` may be set later in the same `githubPackages { }` block, after the extension is constructed. Similarly, `GithubPackagesRepositoryDsl.call()` runs the user's closure *before* filling in credential defaults, so `owner`/`repo`/`profile`/explicit `username`/`token` are all known first — defaults only fill in whichever of username/token the closure left `null`.
 

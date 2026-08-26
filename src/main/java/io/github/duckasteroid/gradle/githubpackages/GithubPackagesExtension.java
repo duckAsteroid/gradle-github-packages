@@ -15,8 +15,8 @@ import javax.inject.Inject;
  *     repository = 'my-repo'
  *     // username and token default via credential resolution chain:
  *     // 1. gpr.user / gpr.key (gradle.properties)
- *     // 2. GITHUB_ACTOR / GITHUB_TOKEN (environment)
- *     // 3. GH_PACKAGES_READ_USER / GH_PACKAGES_READ_TOKEN (environment)
+ *     // 2. GH_PACKAGES_READ_USER / GH_PACKAGES_READ_TOKEN (environment), or userEnvVar / tokenEnvVar when set
+ *     // 3. GITHUB_ACTOR / GITHUB_TOKEN (environment)
  * }
  * }</pre>
  */
@@ -42,12 +42,27 @@ public abstract class GithubPackagesExtension {
     public abstract Property<String> getProfile();
 
     /**
+     * Optional override for the name of the tier 2 environment variable used to resolve
+     * {@link #getUsername()}, in place of the default {@code GH_PACKAGES_READ_USER}. Useful when
+     * a repository's CI secrets already use a different variable name for the shared credential.
+     */
+    public abstract Property<String> getUserEnvVar();
+
+    /**
+     * Optional override for the name of the tier 2 environment variable used to resolve
+     * {@link #getToken()}, in place of the default {@code GH_PACKAGES_READ_TOKEN}. Useful when
+     * a repository's CI secrets already use a different variable name for the shared credential.
+     */
+    public abstract Property<String> getTokenEnvVar();
+
+    /**
      * GitHub username used for authentication.
      * Resolved via three-tier fallback:
      * <ol>
      *   <li>{@code gpr.user} from gradle.properties (project or ~/.gradle/gradle.properties),
      *       or {@code gpr.<profile>.user} when {@link #getProfile()} is set</li>
-     *   <li>{@code GH_PACKAGES_READ_USER} environment variable</li>
+     *   <li>{@code GH_PACKAGES_READ_USER} environment variable, or the variable named by
+     *       {@link #getUserEnvVar()} when set</li>
      *   <li>{@code GITHUB_ACTOR} environment variable</li>
      * </ol>
      */
@@ -59,7 +74,8 @@ public abstract class GithubPackagesExtension {
      * <ol>
      *   <li>{@code gpr.key} from gradle.properties (project or ~/.gradle/gradle.properties),
      *       or {@code gpr.<profile>.key} when {@link #getProfile()} is set</li>
-     *   <li>{@code GH_PACKAGES_READ_TOKEN} environment variable</li>
+     *   <li>{@code GH_PACKAGES_READ_TOKEN} environment variable, or the variable named by
+     *       {@link #getTokenEnvVar()} when set</li>
      *   <li>{@code GITHUB_TOKEN} environment variable</li>
      * </ol>
      */
@@ -67,8 +83,10 @@ public abstract class GithubPackagesExtension {
 
     @Inject
     public GithubPackagesExtension(ObjectFactory objects, ProviderFactory providers) {
-        getUsername().convention(CredentialProviders.USER.apply(providers, getProfile()).orElse(""));
-        getToken().convention(CredentialProviders.TOKEN.apply(providers, getProfile()).orElse(""));
+        getUsername().convention(
+                CredentialProviders.USER.apply(providers, getProfile(), getUserEnvVar()).orElse(""));
+        getToken().convention(
+                CredentialProviders.TOKEN.apply(providers, getProfile(), getTokenEnvVar()).orElse(""));
     }
 
     /** Returns the Maven URL for this GitHub Packages repository. */
