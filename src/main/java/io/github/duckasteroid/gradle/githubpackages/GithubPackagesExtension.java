@@ -17,6 +17,7 @@ import javax.inject.Inject;
  *     // 1. gpr.user / gpr.key (gradle.properties)
  *     // 2. GH_PACKAGES_READ_USER / GH_PACKAGES_READ_TOKEN (environment), or userEnvVar / tokenEnvVar when set
  *     // 3. GITHUB_ACTOR / GITHUB_TOKEN (environment)
+ *     // 4. gh auth token (locally signed-in GitHub CLI)
  * }
  * }</pre>
  */
@@ -57,26 +58,28 @@ public abstract class GithubPackagesExtension {
 
     /**
      * GitHub username used for authentication.
-     * Resolved via three-tier fallback:
+     * Resolved via four-tier fallback:
      * <ol>
      *   <li>{@code gpr.user} from gradle.properties (project or ~/.gradle/gradle.properties),
      *       or {@code gpr.<profile>.user} when {@link #getProfile()} is set</li>
      *   <li>{@code GH_PACKAGES_READ_USER} environment variable, or the variable named by
      *       {@link #getUserEnvVar()} when set</li>
      *   <li>{@code GITHUB_ACTOR} environment variable</li>
+     *   <li>a locally signed-in GitHub CLI (see {@link #getToken()})</li>
      * </ol>
      */
     public abstract Property<String> getUsername();
 
     /**
      * GitHub token used for authentication.
-     * Resolved via three-tier fallback:
+     * Resolved via four-tier fallback:
      * <ol>
      *   <li>{@code gpr.key} from gradle.properties (project or ~/.gradle/gradle.properties),
      *       or {@code gpr.<profile>.key} when {@link #getProfile()} is set</li>
      *   <li>{@code GH_PACKAGES_READ_TOKEN} environment variable, or the variable named by
      *       {@link #getTokenEnvVar()} when set</li>
      *   <li>{@code GITHUB_TOKEN} environment variable</li>
+     *   <li>{@code gh auth token} from a locally signed-in GitHub CLI</li>
      * </ol>
      */
     public abstract Property<String> getToken();
@@ -84,9 +87,9 @@ public abstract class GithubPackagesExtension {
     @Inject
     public GithubPackagesExtension(ObjectFactory objects, ProviderFactory providers) {
         getUsername().convention(
-                CredentialProviders.USER.apply(providers, getProfile(), getUserEnvVar()).orElse(""));
+                CredentialProviders.USER.required(providers, getProfile(), getUserEnvVar()));
         getToken().convention(
-                CredentialProviders.TOKEN.apply(providers, getProfile(), getTokenEnvVar()).orElse(""));
+                CredentialProviders.TOKEN.required(providers, getProfile(), getTokenEnvVar()));
     }
 
     /** Returns the Maven URL for this GitHub Packages repository. */

@@ -30,11 +30,13 @@ import org.gradle.api.publish.PublishingExtension;
  * </ul>
  *
  * <p><strong>Credential Resolution:</strong>
- * Credentials are resolved using a three-tier fallback chain (first available wins):
+ * Credentials are resolved using a four-tier fallback chain (first available wins):
  * <ol>
  *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key} (gradle.properties)</li>
  *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}</li>
  *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
+ *   <li>GitHub CLI: {@code gh auth token} - for a developer
+ *       already signed in locally, so no token need be stored on disk</li>
  * </ol>
  */
 public class GithubPackagesPlugin implements Plugin<Project> {

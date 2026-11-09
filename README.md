@@ -4,7 +4,7 @@ Plugins for Gradle to make it easier to configure GitHub Packages as Maven repos
 
 ## Features
 
-- 🔐 **Flexible credential resolution** with three-tier fallback chain, named profiles, and configurable env var names
+- 🔐 **Flexible credential resolution** with four-tier fallback chain (including the GitHub CLI, so no token need be stored on disk), named profiles, and configurable env var names
 - 📦 **Build script support** via `repositories { gitHubPackages { ... } }`
 - ⚙️ **Settings plugin** for `pluginManagement.repositories` and `dependencyResolutionManagement.repositories`
 - 📝 **Zero configuration** - automatically uses your GitHub credentials
@@ -66,7 +66,7 @@ This configures GitHub Packages for both:
 
 ## Credential Resolution
 
-Credentials are resolved using a three-tier fallback chain. The first available source wins:
+Credentials are resolved using a four-tier fallback chain. The first available source wins:
 
 ### Tier 1: Gradle Properties (Highest Priority)
 ```properties
@@ -86,7 +86,7 @@ token - without storing a full PAT as a per-repository secret. The variable name
 convention; the plugin doesn't inspect or enforce what scopes the token actually has, and the
 names can be overridden (see "Custom Environment Variable Names" below).
 
-### Tier 3: Standard GitHub Actions Environment Variables (Lowest Priority)
+### Tier 3: Standard GitHub Actions Environment Variables
 ```bash
 export GITHUB_ACTOR=your-github-username
 export GITHUB_TOKEN=your-github-token
@@ -106,8 +106,35 @@ jobs:
       - run: ./gradlew build
 ```
 
-Without that `env:` line, Tier 3 silently falls through (empty `GITHUB_TOKEN`) and, absent Tier
-1/2 credentials, resolution against GitHub Packages fails in CI.
+Without that `env:` line, Tier 3 falls through to Tier 4 — which on a CI runner without the
+GitHub CLI signed in means resolution against GitHub Packages fails with a message listing every
+source that was tried.
+
+### Tier 4: GitHub CLI (Lowest Priority)
+
+```bash
+gh auth login
+gh auth refresh -s read:packages
+```
+
+For local development, this is the preferred option: a developer who is already signed in to the
+[GitHub CLI](https://cli.github.com) needs **no token stored on disk at all**. The plugin runs
+`gh auth token` for the password, using the credential from the developer's existing session.
+Nothing to rotate, nothing to leak, and access is revoked the moment the GitHub account is
+disabled or the org revokes the CLI's authorisation.
+
+`maven.pkg.github.com` authenticates on the token alone and ignores the username, so the username
+is a fixed `x-access-token` rather than a network round trip to look up the real login.
+
+The CLI result is cached for 60 seconds. Credentials are resolved once per project, so on a large
+multi-project build this is the difference between one subprocess call and one per project.
+
+This tier is deliberately last, so a CI build never shells out. It is skipped entirely — without
+error — when the CLI is not installed or not signed in, so builds on machines without `gh` behave
+exactly as they did before.
+
+Note that `read:packages` is not among the GitHub CLI's default scopes; `gh auth refresh` is a
+one-off step per developer.
 
 ## Precedence Example
 
@@ -156,7 +183,7 @@ profile name falls through to tiers 2 and 3 instead of silently picking up the w
 This fallthrough is also what keeps a `profile` set in a committed build script working in CI:
 there's no `gpr.<profile>.*` there, so it resolves from `GITHUB_ACTOR`/`GITHUB_TOKEN` as usual.
 
-When `profile` is unset, behavior is unchanged (the three-tier chain above, starting from the
+When `profile` is unset, behavior is unchanged (the four-tier chain above, starting from the
 unqualified `gpr.user` / `gpr.key`).
 
 ## Custom Environment Variable Names

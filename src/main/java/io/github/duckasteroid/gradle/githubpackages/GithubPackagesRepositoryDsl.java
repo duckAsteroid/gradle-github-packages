@@ -27,13 +27,15 @@ import org.gradle.api.provider.ProviderFactory;
  * }</pre>
  *
  * <p><strong>Credential Resolution:</strong>
- * If username/token are not explicitly provided, they are resolved using a three-tier fallback:
+ * If username/token are not explicitly provided, they are resolved using a four-tier fallback:
  * <ol>
  *   <li>Gradle properties: {@code gpr.user} / {@code gpr.key}, or {@code gpr.<profile>.user} /
  *       {@code gpr.<profile>.key} when {@code profile} is set</li>
  *   <li>Environment variables: {@code GH_PACKAGES_READ_USER} / {@code GH_PACKAGES_READ_TOKEN}, or
  *       the variables named by {@code userEnvVar} / {@code tokenEnvVar} when set</li>
  *   <li>Environment variables: {@code GITHUB_ACTOR} / {@code GITHUB_TOKEN}</li>
+ *   <li>GitHub CLI: {@code gh auth token} - for a developer
+ *       already signed in locally, so no token need be stored on disk</li>
  * </ol>
  *
  * <p><strong>Target repository handler:</strong> when invoked as {@code gitHubPackages { ... }}
@@ -97,10 +99,10 @@ public class GithubPackagesRepositoryDsl {
         Provider<String> userEnvVar = providers.provider(spec::getUserEnvVar);
         Provider<String> tokenEnvVar = providers.provider(spec::getTokenEnvVar);
         if (spec.getUsername() == null) {
-            spec.setUsername(CredentialProviders.USER.apply(providers, profile, userEnvVar).getOrElse(""));
+            spec.setUsername(CredentialProviders.USER.required(providers, profile, userEnvVar).get());
         }
         if (spec.getToken() == null) {
-            spec.setToken(CredentialProviders.TOKEN.apply(providers, profile, tokenEnvVar).getOrElse(""));
+            spec.setToken(CredentialProviders.TOKEN.required(providers, profile, tokenEnvVar).get());
         }
     }
 
